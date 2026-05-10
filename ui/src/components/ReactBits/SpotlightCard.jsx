@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import './SpotlightCard.css';
 
-export default function SpotlightCard({ children, className = '', spotlightColor = "rgba(123, 66, 245, 0.15)" }) {
+export default function SpotlightCard({ children, className = '', spotlightColor = "rgba(123, 66, 245, 0.15)", style = {} }) {
   const divRef = useRef(null);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [opacity, setOpacity] = useState(0);
@@ -19,6 +19,7 @@ export default function SpotlightCard({ children, className = '', spotlightColor
       onMouseEnter={() => setOpacity(1)}
       onMouseLeave={() => setOpacity(0)}
       className={`spotlight-wrapper card ${className}`}
+      style={style}
     >
       <div 
         className="spotlight-effect"

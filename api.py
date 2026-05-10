@@ -30,13 +30,6 @@ def get_db():
     finally:
         conn.close()
 
-class UserRegister(BaseModel):
-    username: str
-    password: str
-
-class UserLogin(BaseModel):
-    username: str
-    password: str
 
 class DailyMetric(BaseModel):
     hours_sleep: float
@@ -48,11 +41,6 @@ class ProfileUpdate(BaseModel):
     age: int
     mobile_no: Optional[str] = None
 
-class UserCredentialsUpdate(BaseModel):
-    old_username: str
-    current_password: str
-    new_username: str
-    new_password: str
 
 class ScheduleCreate(BaseModel):
     username: str
@@ -81,25 +69,6 @@ class AssistantRequest(BaseModel):
     date: str
 
 
-@app.post("/api/register")
-def register(user: UserRegister, db: sqlite3.Connection = Depends(get_db)):
-    try:
-        cursor = db.cursor()
-        cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (user.username, user.password))
-        db.commit()
-        return {"message": "User registered successfully"}
-    except sqlite3.IntegrityError:
-        raise HTTPException(status_code=400, detail="Username already exists")
-
-@app.post("/api/login")
-def login(user: UserLogin, db: sqlite3.Connection = Depends(get_db)):
-    cursor = db.cursor()
-    cursor.execute("SELECT age FROM users WHERE username = ? AND password = ?", (user.username, user.password))
-    db_user = cursor.fetchone()
-    if db_user:
-        return {"message": "Logged in successfully", "username": user.username, "age": db_user["age"]}
-    else:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
 
 @app.get("/api/logs/today")
 def get_today_logs(db: sqlite3.Connection = Depends(get_db)):
@@ -152,7 +121,7 @@ def get_burnout_score(username: str, db: sqlite3.Connection = Depends(get_db)):
     cursor.execute("SELECT hours_sleep, stress_level FROM daily_metrics WHERE username=? ORDER BY date DESC LIMIT 1", (username,))
     latest_metric = cursor.fetchone()
     
-    cursor.execute("SELECT age FROM users WHERE username=?", (username,))
+    cursor.execute("SELECT age FROM users LIMIT 1")
     user_data = cursor.fetchone()
     age = int(user_data["age"]) if user_data and user_data["age"] is not None else 25
     
@@ -223,12 +192,12 @@ def get_live_log(db: sqlite3.Connection = Depends(get_db)):
 def get_profile(username: str, db: sqlite3.Connection = Depends(get_db)):
     cursor = db.cursor()
     try:
-        cursor.execute("SELECT age, mobile_no FROM users WHERE username=?", (username,))
+        cursor.execute("SELECT age, mobile_no FROM users LIMIT 1")
         row = cursor.fetchone()
         if row:
             return {"age": row["age"], "mobile_no": row["mobile_no"] or ""}
     except sqlite3.OperationalError:
-        cursor.execute("SELECT age FROM users WHERE username=?", (username,))
+        cursor.execute("SELECT age FROM users LIMIT 1")
         row = cursor.fetchone()
         if row:
             return {"age": row["age"], "mobile_no": ""}
@@ -237,47 +206,25 @@ def get_profile(username: str, db: sqlite3.Connection = Depends(get_db)):
 @app.put("/api/user/profile")
 def update_profile(profile: ProfileUpdate, db: sqlite3.Connection = Depends(get_db)):
     cursor = db.cursor()
+    
+    # Ensure there is at least one row
+    cursor.execute("SELECT id FROM users LIMIT 1")
+    if not cursor.fetchone():
+        cursor.execute("INSERT INTO users (age) VALUES (25)")
+        
     try:
-        cursor.execute("UPDATE users SET age=?, mobile_no=? WHERE username=?", 
-                       (profile.age, profile.mobile_no, profile.username))
+        cursor.execute("UPDATE users SET age=?, mobile_no=?", 
+                       (profile.age, profile.mobile_no))
     except sqlite3.OperationalError:
         try:
             cursor.execute("ALTER TABLE users ADD COLUMN mobile_no TEXT")
         except sqlite3.OperationalError:
             pass
-        cursor.execute("UPDATE users SET age=?, mobile_no=? WHERE username=?", 
-                       (profile.age, profile.mobile_no, profile.username))
+        cursor.execute("UPDATE users SET age=?, mobile_no=?", 
+                       (profile.age, profile.mobile_no))
     
     db.commit()
     return {"message": "Profile updated successfully"}
-
-@app.put("/api/user/credentials")
-def update_credentials(req: UserCredentialsUpdate, db: sqlite3.Connection = Depends(get_db)):
-    cursor = db.cursor()
-    
-    cursor.execute("SELECT password FROM users WHERE username=?", (req.old_username,))
-    row = cursor.fetchone()
-    if not row or row["password"] != req.current_password:
-        raise HTTPException(status_code=400, detail="Incorrect current password")
-
-    if req.new_username != req.old_username:
-        cursor.execute("SELECT id FROM users WHERE username=?", (req.new_username,))
-        row = cursor.fetchone()
-        if row:
-            raise HTTPException(status_code=400, detail="Username already exists")
-
-    if req.new_password:
-        cursor.execute("UPDATE users SET username=?, password=? WHERE username=?", (req.new_username, req.new_password, req.old_username))
-    else:
-        cursor.execute("UPDATE users SET username=? WHERE username=?", (req.new_username, req.old_username))
-
-    # Cascade username changes
-    if req.new_username != req.old_username:
-        cursor.execute("UPDATE daily_metrics SET username=? WHERE username=?", (req.new_username, req.old_username))
-        cursor.execute("UPDATE schedules SET username=? WHERE username=?", (req.new_username, req.old_username))
-    
-    db.commit()
-    return {"message": "Credentials updated successfully"}
 
 @app.get("/api/logs/history")
 def get_history(date: str, db: sqlite3.Connection = Depends(get_db)):
@@ -435,7 +382,7 @@ import re
 def ai_assistant_schedule(req: AssistantRequest, db: sqlite3.Connection = Depends(get_db)):
     import os
     # We use environment variables instead of hardcoded keys to keep your key safe on GitHub!
-    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "YOUR_API_KEY_HERE")
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyA4zyMJaMoNsdNBOJLdE2BtO7VdX3rvYEA")
     
     if not GEMINI_API_KEY or GEMINI_API_KEY == "YOUR_API_KEY_HERE":
         return {

@@ -3,9 +3,7 @@ import {
   BarChart2,
   CheckSquare,
   Timer,
-  Settings,
   History as HistoryIcon,
-  LogOut,
   Activity,
   Moon,
   Sun,
@@ -53,13 +51,12 @@ function Dashboard({ user, onLogout, onUpdateUser }) {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'progress': return <ProgressTab username={user} age={age} />;
+      case 'progress': return <ProgressTab username={user} age={age} setAge={setAge} />;
       case 'schedule': return <ScheduleTab username={user} />;
-      case 'checkin': return <CheckInTab username={user} />;
+      case 'checkin': return <CheckInTab username={user} age={age} setAge={setAge} />;
       case 'live': return <LiveSessionTab />;
       case 'history': return <HistoryTab />;
       case 'drowsiness': return <DrowsinessTab onRedirectToSchedule={() => setActiveTab('schedule')} />;
-      case 'settings': return <SettingsTab user={user} age={age} setAge={setAge} onLogout={onLogout} onUpdateUser={onUpdateUser} />;
       default: return null;
     }
   };
@@ -78,21 +75,11 @@ function Dashboard({ user, onLogout, onUpdateUser }) {
           <NavLink icon={<Timer />} label="Live Session" id="live" active={activeTab} set={setActiveTab} />
           <NavLink icon={<HistoryIcon />} label="History" id="history" active={activeTab} set={setActiveTab} />
           <NavLink icon={<Eye />} label="Drowsiness Detector" id="drowsiness" active={activeTab} set={setActiveTab} />
-          <NavLink icon={<Settings />} label="Settings" id="settings" active={activeTab} set={setActiveTab} />
-        </div>
-        <div className="sidebar-footer">
-          <div className="user-info">
-            <div className="avatar">{user.charAt(0).toUpperCase()}</div>
-            <span>{user}</span>
-          </div>
-          <button onClick={onLogout} className="logout-btn">
-            <LogOut size={18} /> Logout
-          </button>
         </div>
       </nav>
       <main className="main-content">
         <header className="topbar">
-          <h1>Welcome back, {user} 🧘</h1>
+          <h1>Welcome back 🧘</h1>
         </header>
         <div className="content-area">
           {renderContent()}
@@ -111,7 +98,7 @@ function NavLink({ icon, label, id, active, set }) {
 }
 
 // ============== PROGRESS TAB ==============
-function ProgressTab({ username }) {
+function ProgressTab({ username, age, setAge }) {
   const [logs, setLogs] = useState({ distribution: [], total_seconds: 0 });
   const [burnout, setBurnout] = useState({ burnout_score: 0, age: 25 });
   const [entropy, setEntropy] = useState({ burnout_coefficient: 0, mouse_entropy: 0, typing_variance: 0, lexical_diversity: 1, switch_back_latency: 0 });
@@ -191,8 +178,37 @@ function ProgressTab({ username }) {
             </div>
           </div>
           <p className="text-center w-full mt-4" style={{ fontSize: '0.9rem' }}>
-            Score is adjusted based on {burnout.age || 25} yrs old resilient factors. Keep it under 40%.
+            Score is adjusted based on {burnout.age || age || 25} yrs old resilient factors. Keep it under 40%.
           </p>
+          <div className="input-group w-full mt-3">
+            <label>Update Age (Resilience Factor):</label>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <input 
+                type="number" 
+                min="10" 
+                max="120" 
+                value={age} 
+                onChange={e => setAge(parseInt(e.target.value) || '')} 
+                className="input" 
+                style={{ flex: 1 }}
+              />
+              <button 
+                className="btn" 
+                style={{ width: 'auto' }}
+                onClick={async () => {
+                  try {
+                    await api.put('/user/profile', { username, age });
+                    const res = await api.get(`/metrics/burnout-score?username=${username}`);
+                    setBurnout(res.data);
+                  } catch (err) {
+                    console.error(err);
+                  }
+                }}
+              >
+                Save
+              </button>
+            </div>
+          </div>
         </SpotlightCard>
       </div>
 
@@ -238,7 +254,7 @@ function ProgressTab({ username }) {
 }
 
 // ============== CHECK-IN TAB ==============
-function CheckInTab({ username }) {
+function CheckInTab({ username, age, setAge }) {
   const [sleep, setSleep] = useState(7);
   const [stress, setStress] = useState(5);
   const [msg, setMsg] = useState('');
@@ -247,7 +263,8 @@ function CheckInTab({ username }) {
     e.preventDefault();
     try {
       await api.post('/metrics/daily', { hours_sleep: sleep, stress_level: stress, username });
-      setMsg('Daily metrics saved successfully!');
+      await api.put('/user/profile', { username, age });
+      setMsg('Daily metrics and profile saved successfully!');
       setTimeout(() => setMsg(''), 3000);
     } catch (err) {
       setMsg('Error saving metrics.');
@@ -258,10 +275,14 @@ function CheckInTab({ username }) {
     <div className="tab-container animate-fade-in">
       <h2>Daily Wellness Check</h2>
       <p>Take a moment to reflect on your well-being.</p>
-      <SpotlightCard className="glass form-card">
+      <SpotlightCard className="glass" style={{ width: '100%', maxWidth: 'none' }}>
         <form onSubmit={submitMetrics}>
           {msg && <div className="alert success">{msg}</div>}
           <div className="input-group">
+            <label>Your Age (Used for Burnout Prediction)</label>
+            <input type="number" min="10" max="120" value={age} onChange={e => setAge(parseInt(e.target.value))} required className="input" />
+          </div>
+          <div className="input-group mt-3">
             <label>Hours of Sleep: {sleep} hr(s)</label>
             <input type="range" min="0" max="14" step="0.5" value={sleep} onChange={e => setSleep(parseFloat(e.target.value))} />
           </div>
@@ -422,93 +443,7 @@ function HistoryTab() {
   );
 }
 
-// ============== SETTINGS TAB ==============
-function SettingsTab({ user, age, setAge, onLogout, onUpdateUser }) {
-  const [msg, setMsg] = useState('');
 
-  const [newUsername, setNewUsername] = useState(user);
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [credMsg, setCredMsg] = useState('');
-
-  const updateProfile = async (e) => {
-    e.preventDefault();
-    try {
-      await api.put('/user/profile', { username: user, age });
-      setMsg('Profile updated!');
-      setTimeout(() => setMsg(''), 3000);
-    } catch (err) {
-      setMsg('Error updating profile.');
-    }
-  };
-
-  const updateCredentials = async (e) => {
-    e.preventDefault();
-    if (!newUsername.trim() || !currentPassword.trim()) {
-      setCredMsg('Username and Current Password are required');
-      return;
-    }
-    try {
-      await api.put('/user/credentials', {
-        old_username: user,
-        current_password: currentPassword,
-        new_username: newUsername,
-        new_password: newPassword
-      });
-      setCredMsg('Credentials updated successfully!');
-      if (newUsername !== user) {
-        onUpdateUser(newUsername);
-      }
-      setNewPassword('');
-      setTimeout(() => setCredMsg(''), 3000);
-    } catch (err) {
-      setCredMsg(err.response?.data?.detail || 'Error updating credentials');
-    }
-  };
-
-  return (
-    <div className="tab-container animate-fade-in">
-      <h2>Settings & Profile</h2>
-      <div className="grid-2 mt-4">
-        <SpotlightCard className="glass">
-          <form onSubmit={updateProfile}>
-            <h3>Profile Details</h3>
-            {msg && <div className="alert success">{msg}</div>}
-            <div className="input-group">
-              <label>Your Age</label>
-              <input type="number" min="10" max="120" value={age} onChange={e => setAge(parseInt(e.target.value))} required className="input" />
-            </div>
-            <button type="submit" className="btn mt-4">Save Profile Info</button>
-          </form>
-        </SpotlightCard>
-
-        <SpotlightCard className="glass">
-          <form onSubmit={updateCredentials}>
-            <h3>Account Settings</h3>
-            {credMsg && <div className="alert mt-3" style={{ padding: '10px', borderRadius: '8px', background: credMsg.includes('Error') || credMsg.includes('empty') ? 'rgba(255,68,68,0.1)' : 'rgba(0,200,81,0.1)', color: credMsg.includes('Error') || credMsg.includes('empty') ? '#ff4444' : '#00C851' }}>{credMsg}</div>}
-
-            <div className="input-group mt-3">
-              <label>Username</label>
-              <input type="text" className="input" value={newUsername} onChange={e => setNewUsername(e.target.value)} required />
-            </div>
-
-            <div className="input-group mt-3">
-              <label>Current Password</label>
-              <input type="password" className="input" placeholder="Required for any account changes" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} required />
-            </div>
-
-            <div className="input-group mt-3">
-              <label>New Password (Optional)</label>
-              <input type="password" className="input" placeholder="Leave blank to keep current password" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
-            </div>
-
-            <button type="submit" className="btn outline mt-4 w-full">Update Login Info</button>
-          </form>
-        </SpotlightCard>
-      </div>
-    </div>
-  );
-}
 
 const defaultDistractions = ["youtube", "game", "netflix", "instagram", "facebook", "twitter", "tiktok", "whatsapp", "valorant", "steam", "epic games", "roblox", "minecraft", "riot client", "league of legends"];
 

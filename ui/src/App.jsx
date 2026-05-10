@@ -1,40 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import Auth from './components/Auth';
+import React from 'react';
 import Dashboard from './components/Dashboard';
+import Orb from './components/ReactBits/Orb';
 
 function App() {
-  const [user, setUser] = useState(null);
-
-  useEffect(() => {
-    const savedUser = sessionStorage.getItem('username');
-    if (savedUser) {
-        setUser(savedUser);
-    }
-  }, []);
-
-  const handleLogin = (username) => {
-    setUser(username);
-    sessionStorage.setItem('username', username);
-  };
-
-  const handleLogout = () => {
-    setUser(null);
-    sessionStorage.removeItem('username');
-  };
-
-  const handleUpdateUser = (newUsername) => {
-    setUser(newUsername);
-    sessionStorage.setItem('username', newUsername);
-  };
-
   return (
-    <Router>
-      <Routes>
-        <Route path="/login" element={user ? <Navigate to="/" /> : <Auth onLogin={handleLogin} />} />
-        <Route path="/*" element={user ? <Dashboard user={user} onLogout={handleLogout} onUpdateUser={handleUpdateUser} /> : <Navigate to="/login" />} />
-      </Routes>
-    </Router>
+    <Orb
+      hoverIntensity={3.28}
+      rotateOnHover={false}
+      hue={260}
+      forceHoverState={false}
+      backgroundColor="#0d0d10"
+    >
+      <Dashboard user="Demo" />
+    </Orb>
   );
 }
 

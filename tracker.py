@@ -39,15 +39,11 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE,
-            password TEXT,
-            age INTEGER DEFAULT 25
+            age INTEGER DEFAULT 25,
+            mobile_no TEXT,
+            blocked_keywords TEXT
         )
     ''')
-    try:
-        cursor.execute("ALTER TABLE users ADD COLUMN age INTEGER DEFAULT 25")
-    except sqlite3.OperationalError:
-        pass
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN blocked_keywords TEXT")
     except sqlite3.OperationalError:
@@ -204,11 +200,7 @@ def calculate_and_store_entropy():
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
         
-        username = "default"
-        cursor.execute("SELECT username FROM users ORDER BY id DESC LIMIT 1")
-        row = cursor.fetchone()
-        if row:
-            username = row[0]
+        username = "Demo"
             
         cursor.execute("""
             INSERT INTO burnout_metrics 
